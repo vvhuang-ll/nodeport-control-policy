@@ -12,8 +12,8 @@ func TestParsingSettingsWithNoValueProvided(t *testing.T) {
 		t.Errorf("Unexpected error %+v", err)
 	}
 
-	if len(settings.DeniedNames) != 0 {
-		t.Errorf("Expected DeniedNames to be empty")
+	if settings.DisableNodePort {
+		t.Errorf("Expected DisableNodePort to be false by default")
 	}
 
 	valid, err := settings.Valid()
@@ -25,16 +25,42 @@ func TestParsingSettingsWithNoValueProvided(t *testing.T) {
 	}
 }
 
-func TestIsNameDenied(t *testing.T) {
+func TestNodePortControl(t *testing.T) {
+	// 测试场景1：禁用 NodePort
 	settings := Settings{
-		DeniedNames: []string{"bob"},
+		DisableNodePort: true,
 	}
 
-	if !settings.IsNameDenied("bob") {
-		t.Errorf("name should be denied")
+	if settings.IsNodePortAllowed() {
+		t.Errorf("NodePort should be disabled when DisableNodePort is true")
 	}
 
-	if settings.IsNameDenied("alice") {
-		t.Errorf("name should not be denied")
+	// 测试场景2：允许 NodePort
+	settings = Settings{
+		DisableNodePort: false,
+	}
+
+	if !settings.IsNodePortAllowed() {
+		t.Errorf("NodePort should be allowed when DisableNodePort is false")
+	}
+}
+
+func TestParsingSettingsWithValueProvided(t *testing.T) {
+	rawSettings := []byte(`{"disable_nodeport": true}`)
+	settings := &Settings{}
+	if err := json.Unmarshal(rawSettings, settings); err != nil {
+		t.Errorf("Unexpected error %+v", err)
+	}
+
+	if !settings.DisableNodePort {
+		t.Errorf("Expected DisableNodePort to be true")
+	}
+
+	valid, err := settings.Valid()
+	if !valid {
+		t.Errorf("Settings are reported as not valid")
+	}
+	if err != nil {
+		t.Errorf("Unexpected error %+v", err)
 	}
 }

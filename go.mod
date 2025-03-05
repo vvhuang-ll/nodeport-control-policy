@@ -1,4 +1,4 @@
-module github.com/kubewarden/go-policy-template
+module github.com/vvhuang-ll/service-policy
 
 go 1.22
 

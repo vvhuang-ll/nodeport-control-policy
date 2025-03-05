@@ -1,105 +1,115 @@
 [![Stable](https://img.shields.io/badge/status-stable-brightgreen?style=for-the-badge)](https://github.com/kubewarden/community/blob/main/REPOSITORIES.md#stable)
 
-# go-policy-template
+# nodeport-control-policy
 
-This is a template repository you can use to scaffold a Kubewarden policy written using Go language.
+这是一个 Kubewarden 策略，用于控制 Kubernetes 集群中 NodePort 类型服务的创建。通过此策略，集群管理员可以限制用户创建 NodePort 类型的服务，从而加强集群的网络安全控制。
 
-Don't forget to check Kubewarden's
-[official documentation](https://docs.kubewarden.io)
-for more information about writing policies.
+## 简介
 
-## Introduction
+NodePort 服务类型允许从集群外部直接访问集群内的服务，这可能会带来潜在的安全风险。本策略允许集群管理员：
+- 完全禁止创建 NodePort 类型的服务
+- 允许创建 NodePort 类型的服务
+- 对其他类型的服务（如 ClusterIP、LoadBalancer）不做限制
 
-This repository has a working policy written in Go.
+## 配置
 
-The policy looks at the `name` of a Kubernetes Pod and rejects the request if the name is on a "deny list".
-
-The "deny list" is configurable by the user via the runtime settings of the policy.
-You express the configuration of the policy using this structure:
+策略的配置非常简单，只需要一个布尔值参数：
 
 ```json
 {
-  "denied_names": [ "badname1", "badname2" ]
+  "disable_nodeport": true
 }
 ```
 
-## Code organization
+配置参数说明：
+- `disable_nodeport`: 布尔值
+  - `true`: 禁止创建 NodePort 类型的服务
+  - `false`: 允许创建 NodePort 类型的服务
+  - 默认值：`false`（如果未设置）
 
-The code that takes care of parsing the settings is in the `settings.go` file.
-Actual validation code is in the `validate.go` file.
-The `main.go` only has the code to registers the entry points of the policy.
+## 使用示例
 
-## Implementation details
+1. 禁止创建 NodePort 服务：
+```yaml
+apiVersion: policies.kubewarden.io/v1
+kind: ClusterAdmissionPolicy
+metadata:
+  name: disable-nodeport
+spec:
+  module: registry://ghcr.io/kubewarden/policies/nodeport-control-policy:v0.1.0
+  settings:
+    disable_nodeport: true
+  rules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      resources: ["services"]
+      operations: ["CREATE"]
+```
 
-> **DISCLAIMER:** WebAssembly is a constantly evolving area.
-> This document describes the status of the Go ecosystem as of July 2023.
+2. 允许创建 NodePort 服务：
+```yaml
+apiVersion: policies.kubewarden.io/v1
+kind: ClusterAdmissionPolicy
+metadata:
+  name: allow-nodeport
+spec:
+  module: registry://ghcr.io/kubewarden/policies/nodeport-control-policy:v0.1.0
+  settings:
+    disable_nodeport: false
+  rules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      resources: ["services"]
+      operations: ["CREATE"]
+```
 
-Currently, the official Go compiler can't produce WebAssembly binaries that can run **outside** the browser.
-Because of that, you can only build Kubewarden Go policies with the [TinyGo](https://tinygo.org/) compiler.
+## 代码组织
 
-Kubewarden policies need to process JSON data.
-For example, the policy settings and the actual request received by Kubernetes.
-TinyGo doesn't yet support the full Go Standard Library,
-it has limited support of Go reflection.
-Because of that, it's impossible to import the official Kubernetes Go library from upstream (e.g.: `k8s.io/api/core/v1`).
-Importing these official Kubernetes types results in a compilation failure.
+- `settings.go`: 包含策略配置的解析和验证逻辑
+- `validate.go`: 包含服务类型验证的核心逻辑
+- `main.go`: 包含策略入口点的注册代码
 
-However, it's still possible to write a Kubewarden policy by using certain third party libraries.
+## 测试
 
-> **Warning:**
-> Using an older version of TinyGo results in runtime errors due to the limited support for Go reflection.
+### 单元测试
 
-This list of libraries can be useful when writing a Kubewarden policy:
-
-- [Kubernetes Go types](https://github.com/kubewarden/k8s-objects) for TinyGo:
-the official Kubernetes Go Types can't be used with TinyGo.
-This module provides all the Kubernetes Types in a TinyGo-friendly way.
-- Parsing JSON: Queries against JSON documents can be written using the
-[gjson](https://github.com/tidwall/gjson) library.
-The library features a powerful query language that allows quick navigation of JSON documents and data retrieval.
-- Generic `set` implementation: Using [Set](https://en.wikipedia.org/wiki/Set_(abstract_data_type)) data types can reduce the amount of code in a policy,
-see the `union`, `intersection`, `difference`, and other operations provided by a Set implementation.
-The [mapset](https://github.com/deckarep/golang-set) can be used when writing policies.
-
-Last, but not least, this policy takes advantage of helper functions provided by
-[Kubewarden's Go SDK](https://github.com/kubewarden/policy-sdk-go).
-
-## Testing
-
-This policy comes with unit tests implemented using the Go testing
-framework.
-
-As usual, the tests are defined in `_test.go` files.
-As these tests aren't part of the final WebAssembly binary, the official Go compiler can be used to run them.
-
-The unit tests can be run via a simple command:
-
+运行单元测试：
 ```console
 make test
 ```
 
-It's also important to test the final result of the TinyGo compilation:
-the actual WebAssembly module.
+### 端到端测试
 
-This is done with a second set of end-to-end tests.
-These tests use the `kwctl` cli provided by the Kubewarden project to load and execute the policy.
-
-The e2e tests are implemented using
-[bats](https://github.com/bats-core/bats-core),
-the Bash Automated Testing System.
-
-The end-to-end tests are defined in the `e2e.bats` file and can be run using:
-
+运行端到端测试：
 ```console
 make e2e-tests
 ```
 
-## Automation
+测试场景包括：
+1. 当策略配置为禁用 NodePort 时，拒绝创建 NodePort 类型的服务
+2. 当策略配置为允许 NodePort 时，允许创建 NodePort 类型的服务
+3. 无论策略如何配置，始终允许创建 ClusterIP 类型的服务
+4. 使用默认配置时的行为测试
 
-This project has the following [GitHub Actions](https://docs.github.com/en/actions):
+## 实现细节
 
-- `e2e-tests`: this action builds the WebAssembly policy,
-installs the `bats` utility and then runs the end-to-end test.
-- `unit-tests`: this action runs the Go unit tests.
-- `release`: this action builds the WebAssembly policy and pushes it to a user defined OCI registry
-([ghcr](https://ghcr.io) is a good candidate).
+本策略使用 Go 语言编写，并使用 TinyGo 编译为 WebAssembly。主要使用了以下库：
+- [Kubewarden's Go SDK](https://github.com/kubewarden/policy-sdk-go)
+- [Kubernetes Go types](https://github.com/kubewarden/k8s-objects)
+
+## 安全考虑
+
+NodePort 服务类型会在所有节点上开放端口，可能带来以下安全风险：
+1. 增加集群的攻击面
+2. 可能暴露内部服务
+3. 可能违反网络安全策略
+
+因此，在生产环境中建议谨慎使用 NodePort 服务，可以考虑使用此策略来控制其使用。
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request 来帮助改进这个策略。
+
+## 许可证
+
+Apache-2.0

@@ -2,25 +2,25 @@
   "uid": "1299d386-525b-4032-98ae-1949f69f9cfc",
   "kind": {
     "group": "",
-    "kind": "Pod",
+    "kind": "Service",
     "version": "v1"
   },
   "resource": {
     "group": "",
     "version": "v1",
-    "resource": "pods"
+    "resource": "services"
   },
   "requestKind": {
     "group": "",
     "version": "v1",
-    "kind": "Pod"
+    "kind": "Service"
   },
   "requestResource": {
     "group": "",
     "version": "v1",
-    "resource": "pods"
+    "resource": "services"
   },
-  "name": "nginx",
+  "name": "test-service",
   "namespace": "default",
   "operation": "CREATE",
   "userInfo": {
@@ -32,25 +32,22 @@
   },
   "object": {
     "apiVersion": "v1",
-    "kind": "Pod",
+    "kind": "Service",
     "metadata": {
-      "name": "test-pod",
-      "namespace": "default",
-      "labels": {
-        "cc-center": "123",
-        "owner": "team-alpha"
-      }
+      "name": "test-service",
+      "namespace": "default"
     },
     "spec": {
-      "containers": [
+      "type": "NodePort",
+      "selector": {
+        "app": "test"
+      },
+      "ports": [
         {
-          "name": "pause",
-          "image": "registry.k8s.io/pause",
-          "securityContext": {
-            "privileged": true
-          }
+          "port": 80,
+          "targetPort": 8080
         }
       ]
     }
   }
-}
+} 

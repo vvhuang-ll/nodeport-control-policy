@@ -8,24 +8,20 @@ import (
 	kubewarden_protocol "github.com/kubewarden/policy-sdk-go/protocol"
 )
 
-// Settings is the structure that describes the policy settings.
+// Settings 结构定义了策略设置
+// DisableNodePort: 当设置为 true 时，将禁止创建 NodePort 类型的服务
 type Settings struct {
-	DeniedNames []string `json:"denied_names"`
+	DisableNodePort bool `json:"disable_nodeport"`
 }
 
-// No special checks have to be done.
+// Valid 验证设置是否有效
 func (s *Settings) Valid() (bool, error) {
 	return true, nil
 }
 
-func (s *Settings) IsNameDenied(name string) bool {
-	for _, deniedName := range s.DeniedNames {
-		if deniedName == name {
-			return true
-		}
-	}
-
-	return false
+// IsNodePortAllowed 检查是否允许使用 NodePort
+func (s *Settings) IsNodePortAllowed() bool {
+	return !s.DisableNodePort
 }
 
 func NewSettingsFromValidationReq(validationReq *kubewarden_protocol.ValidationRequest) (Settings, error) {

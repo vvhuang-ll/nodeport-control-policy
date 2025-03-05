@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	onelog "github.com/francoispqt/onelog"
 	corev1 "github.com/kubewarden/k8s-objects/api/core/v1"
@@ -14,7 +13,7 @@ import (
 const httpBadRequestStatusCode = 400
 
 func validate(payload []byte) ([]byte, error) {
-	// Create a ValidationRequest instance from the incoming payload
+	// 从传入的 payload 创建 ValidationRequest 实例
 	validationRequest := kubewarden_protocol.ValidationRequest{}
 	err := json.Unmarshal(payload, &validationRequest)
 	if err != nil {
@@ -23,7 +22,7 @@ func validate(payload []byte) ([]byte, error) {
 			kubewarden.Code(httpBadRequestStatusCode))
 	}
 
-	// Create a Settings instance from the ValidationRequest object
+	// 从 ValidationRequest 对象创建 Settings 实例
 	settings, err := NewSettingsFromValidationReq(&validationRequest)
 	if err != nil {
 		return kubewarden.RejectRequest(
@@ -31,34 +30,38 @@ func validate(payload []byte) ([]byte, error) {
 			kubewarden.Code(httpBadRequestStatusCode))
 	}
 
-	// Access the **raw** JSON that describes the object
-	podJSON := validationRequest.Request.Object
+	// 获取原始的 Service JSON 数据
+	serviceJSON := validationRequest.Request.Object
 
-	// Try to create a Pod instance using the RAW JSON we got from the
-	// ValidationRequest.
-	pod := &corev1.Pod{}
-	if err = json.Unmarshal([]byte(podJSON), pod); err != nil {
+	// 尝试将 RAW JSON 解析为 Service 对象
+	service := &corev1.Service{}
+	if err = json.Unmarshal([]byte(serviceJSON), service); err != nil {
 		return kubewarden.RejectRequest(
 			kubewarden.Message(
-				fmt.Sprintf("Cannot decode Pod object: %s", err.Error())),
+				fmt.Sprintf("Cannot decode Service object: %s", err.Error())),
 			kubewarden.Code(httpBadRequestStatusCode))
 	}
 
-	logger.DebugWithFields("validating pod object", func(e onelog.Entry) {
-		e.String("name", pod.Metadata.Name)
-		e.String("namespace", pod.Metadata.Namespace)
+	logger.DebugWithFields("validating service object", func(e onelog.Entry) {
+		e.String("name", service.Metadata.Name)
+		e.String("namespace", service.Metadata.Namespace)
 	})
 
-	if settings.IsNameDenied(pod.Metadata.Name) {
-		logger.InfoWithFields("rejecting pod object", func(e onelog.Entry) {
-			e.String("name", pod.Metadata.Name)
-			e.String("denied_names", strings.Join(settings.DeniedNames, ","))
-		})
+	// 检查服务类型是否为 NodePort
+	if service.Spec.Type == "NodePort" {
+		// 如果设置禁用了 NodePort
+		if !settings.IsNodePortAllowed() {
+			logger.InfoWithFields("rejecting service object", func(e onelog.Entry) {
+				e.String("name", service.Metadata.Name)
+				e.String("type", string(service.Spec.Type))
+				e.Bool("disable_nodeport", settings.DisableNodePort)
+			})
 
-		return kubewarden.RejectRequest(
-			kubewarden.Message(
-				fmt.Sprintf("The '%s' name is on the deny list", pod.Metadata.Name)),
-			kubewarden.NoCode)
+			return kubewarden.RejectRequest(
+				kubewarden.Message(
+					fmt.Sprintf("Service '%s' of type NodePort is not allowed as per policy configuration", service.Metadata.Name)),
+				kubewarden.NoCode)
+		}
 	}
 
 	return kubewarden.AcceptRequest()

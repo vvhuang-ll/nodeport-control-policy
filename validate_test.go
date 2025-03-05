@@ -12,14 +12,17 @@ import (
 
 func TestEmptySettingsLeadsToApproval(t *testing.T) {
 	settings := Settings{}
-	pod := corev1.Pod{
+	service := corev1.Service{
 		Metadata: &metav1.ObjectMeta{
-			Name:      "test-pod",
+			Name:      "test-service",
 			Namespace: "default",
+		},
+		Spec: &corev1.ServiceSpec{
+			Type: "ClusterIP",
 		},
 	}
 
-	payload, err := kubewarden_testing.BuildValidationRequest(&pod, &settings)
+	payload, err := kubewarden_testing.BuildValidationRequest(&service, &settings)
 	if err != nil {
 		t.Errorf("Unexpected error: %+v", err)
 	}
@@ -34,23 +37,26 @@ func TestEmptySettingsLeadsToApproval(t *testing.T) {
 		t.Errorf("Unexpected error: %+v", err)
 	}
 
-	if response.Accepted != true {
+	if !response.Accepted {
 		t.Errorf("Unexpected rejection: msg %s - code %d", *response.Message, *response.Code)
 	}
 }
 
-func TestApproval(t *testing.T) {
+func TestNodePortAllowed(t *testing.T) {
 	settings := Settings{
-		DeniedNames: []string{"foo", "bar"},
+		DisableNodePort: false,
 	}
-	pod := corev1.Pod{
+	service := corev1.Service{
 		Metadata: &metav1.ObjectMeta{
-			Name:      "test-pod",
+			Name:      "test-service",
 			Namespace: "default",
+		},
+		Spec: &corev1.ServiceSpec{
+			Type: "NodePort",
 		},
 	}
 
-	payload, err := kubewarden_testing.BuildValidationRequest(&pod, &settings)
+	payload, err := kubewarden_testing.BuildValidationRequest(&service, &settings)
 	if err != nil {
 		t.Errorf("Unexpected error: %+v", err)
 	}
@@ -65,51 +71,26 @@ func TestApproval(t *testing.T) {
 		t.Errorf("Unexpected error: %+v", err)
 	}
 
-	if response.Accepted != true {
+	if !response.Accepted {
 		t.Error("Unexpected rejection")
 	}
 }
 
-func TestApproveFixture(t *testing.T) {
+func TestNodePortDisabled(t *testing.T) {
 	settings := Settings{
-		DeniedNames: []string{},
+		DisableNodePort: true,
 	}
-
-	payload, err := kubewarden_testing.BuildValidationRequestFromFixture(
-		"test_data/pod.json",
-		&settings)
-	if err != nil {
-		t.Errorf("Unexpected error: %+v", err)
-	}
-
-	responsePayload, err := validate(payload)
-	if err != nil {
-		t.Errorf("Unexpected error: %+v", err)
-	}
-
-	var response kubewarden_protocol.ValidationResponse
-	if err = json.Unmarshal(responsePayload, &response); err != nil {
-		t.Errorf("Unexpected error: %+v", err)
-	}
-
-	if response.Accepted != true {
-		t.Error("Unexpected rejection")
-	}
-}
-
-func TestRejectionBecauseNameIsDenied(t *testing.T) {
-	settings := Settings{
-		DeniedNames: []string{"foo", "test-pod"},
-	}
-
-	pod := corev1.Pod{
+	service := corev1.Service{
 		Metadata: &metav1.ObjectMeta{
-			Name:      "test-pod",
+			Name:      "test-service",
 			Namespace: "default",
+		},
+		Spec: &corev1.ServiceSpec{
+			Type: "NodePort",
 		},
 	}
 
-	payload, err := kubewarden_testing.BuildValidationRequest(&pod, &settings)
+	payload, err := kubewarden_testing.BuildValidationRequest(&service, &settings)
 	if err != nil {
 		t.Errorf("Unexpected error: %+v", err)
 	}
@@ -124,15 +105,49 @@ func TestRejectionBecauseNameIsDenied(t *testing.T) {
 		t.Errorf("Unexpected error: %+v", err)
 	}
 
-	if response.Accepted != false {
+	if response.Accepted {
 		t.Error("Unexpected approval")
 	}
 
-	expectedMessage := "The 'test-pod' name is on the deny list"
+	expectedMessage := "Service 'test-service' of type NodePort is not allowed as per policy configuration"
 	if response.Message == nil {
 		t.Errorf("expected response to have a message")
 	}
 	if *response.Message != expectedMessage {
 		t.Errorf("Got '%s' instead of '%s'", *response.Message, expectedMessage)
+	}
+}
+
+func TestNonNodePortService(t *testing.T) {
+	settings := Settings{
+		DisableNodePort: true,
+	}
+	service := corev1.Service{
+		Metadata: &metav1.ObjectMeta{
+			Name:      "test-service",
+			Namespace: "default",
+		},
+		Spec: &corev1.ServiceSpec{
+			Type: "ClusterIP",
+		},
+	}
+
+	payload, err := kubewarden_testing.BuildValidationRequest(&service, &settings)
+	if err != nil {
+		t.Errorf("Unexpected error: %+v", err)
+	}
+
+	responsePayload, err := validate(payload)
+	if err != nil {
+		t.Errorf("Unexpected error: %+v", err)
+	}
+
+	var response kubewarden_protocol.ValidationResponse
+	if err = json.Unmarshal(responsePayload, &response); err != nil {
+		t.Errorf("Unexpected error: %+v", err)
+	}
+
+	if !response.Accepted {
+		t.Error("Unexpected rejection")
 	}
 }
