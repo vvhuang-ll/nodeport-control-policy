@@ -8,18 +8,18 @@ import (
 	kubewarden_protocol "github.com/kubewarden/policy-sdk-go/protocol"
 )
 
-// Settings 结构定义了策略设置
-// DisableNodePort: 当设置为 true 时，将禁止创建 NodePort 类型的服务
+// Settings 结构定义了策略设置。
+// DisableNodePort: 当设置为 true 时，将禁止创建 NodePort 类型的服务。
 type Settings struct {
 	DisableNodePort bool `json:"disable_nodeport"`
 }
 
-// Valid 验证设置是否有效
+// Valid 验证设置是否有效。
 func (s *Settings) Valid() (bool, error) {
 	return true, nil
 }
 
-// IsNodePortAllowed 检查是否允许使用 NodePort
+// IsNodePortAllowed 检查是否允许使用 NodePort。
 func (s *Settings) IsNodePortAllowed() bool {
 	return !s.DisableNodePort
 }
